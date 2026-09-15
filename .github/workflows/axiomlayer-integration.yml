@@ -1,0 +1,103 @@
+name: AxiomLayer stage-zero integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: axiomlayer-nix-installer-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    name: Fork and workflow boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the integration candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the immutable consumer contract
+        run: python3 scripts/verify-axiomlayer-integration.py policy
+
+  source:
+    name: Nix build and tests (${{ matrix.system }})
+    needs: policy
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+          - runner: macos-15
+            system: aarch64-darwin
+    steps:
+      - name: Check out the integration candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the Nix build driver
+        uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6
+        with:
+          extra-conf: |
+            accept-flake-config = false
+            flake-registry =
+      - name: Build and test the candidate from its locked flake
+        env:
+          NIX_CONFIG: |
+            accept-flake-config = false
+            flake-registry =
+        run: |
+          nix build ".#packages.${{ matrix.system }}.default" --no-write-lock-file --out-link result-installer -L
+          test "$(result-installer/bin/nix-installer --version)" = "nix-installer 2.35.2"
+          nix build ".#checks.${{ matrix.system }}.test" ".#checks.${{ matrix.system }}.check-version-consistency" --no-write-lock-file --no-link -L
+          git diff --exit-code -- flake.lock
+
+  lifecycle:
+    name: Stage-zero refusal and rollback (${{ matrix.system }})
+    needs: policy
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+          - runner: macos-15
+            system: aarch64-darwin
+    steps:
+      - name: Check out the integration policy
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch and verify the exact stage-zero input
+        run: python3 scripts/verify-axiomlayer-integration.py fetch "${{ matrix.system }}" "$RUNNER_TEMP/nix-installer"
+      - name: Prove a changed artifact is refused before execution
+        run: |
+          cp "$RUNNER_TEMP/nix-installer" "$RUNNER_TEMP/nix-installer-tampered"
+          printf '\naxiomlayer-tamper\n' >> "$RUNNER_TEMP/nix-installer-tampered"
+          if python3 scripts/verify-axiomlayer-integration.py artifact "${{ matrix.system }}" "$RUNNER_TEMP/nix-installer-tampered" --no-execute; then
+            echo "error: tampered stage-zero artifact was accepted" >&2
+            exit 1
+          fi
+      - name: Prove install and rollback on an ephemeral runner
+        run: scripts/test-axiomlayer-stage-zero-lifecycle.sh "${{ matrix.system }}" "$RUNNER_TEMP/nix-installer"

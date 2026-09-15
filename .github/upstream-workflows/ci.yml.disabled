@@ -1,3 +1,4 @@
+# Inert upstream reference; AxiomLayer never loads this as a workflow.
 name: CI
 
 on:
@@ -328,4 +329,3 @@ jobs:
 
       - name: Run container tests for ${{ matrix.distro }}
         run: nix build .#checks.x86_64-linux.container-test-${{ matrix.distro }}-all -L
-
