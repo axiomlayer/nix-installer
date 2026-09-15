@@ -1,3 +1,4 @@
+# Inert upstream reference; AxiomLayer never loads this as a workflow.
 name: Bump Nix Version
 
 on:
