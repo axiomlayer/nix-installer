@@ -64,13 +64,13 @@ jobs:
             flake-registry =
         run: |
           nix build ".#packages.${{ matrix.system }}.default" --no-write-lock-file --out-link result-installer -L
-          nix build ".#checks.${{ matrix.system }}.test" ".#checks.${{ matrix.system }}.check-version-consistency" --no-write-lock-file --no-link -L
           test "$(result-installer/bin/nix-installer --version)" = "nix-installer 2.35.2"
+          nix build ".#checks.${{ matrix.system }}.test" ".#checks.${{ matrix.system }}.check-version-consistency" --no-write-lock-file --no-link -L
           git diff --exit-code -- flake.lock
 
   lifecycle:
     name: Stage-zero refusal and rollback (${{ matrix.system }})
-    needs: source
+    needs: policy
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
