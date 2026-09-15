@@ -46,8 +46,16 @@ if [[ "$installed_version" != "nix (Nix) 2.35.2" ]]; then
   exit 1
 fi
 
-grep -Fqx "flake-registry =" /etc/nix/nix.custom.conf
-grep -Fqx "accept-flake-config = false" /etc/nix/nix.custom.conf
+if ! grep -Eq '^flake-registry[[:space:]]*=[[:space:]]*$' /etc/nix/nix.custom.conf; then
+  echo "error: installed custom config did not disable the flake registry" >&2
+  sed -n '1,120p' /etc/nix/nix.custom.conf >&2
+  exit 1
+fi
+if ! grep -Eq '^accept-flake-config[[:space:]]*=[[:space:]]*false[[:space:]]*$' /etc/nix/nix.custom.conf; then
+  echo "error: installed custom config did not refuse flake-supplied config" >&2
+  sed -n '1,120p' /etc/nix/nix.custom.conf >&2
+  exit 1
+fi
 test -x /nix/nix-installer
 test -f /nix/receipt.json
 
