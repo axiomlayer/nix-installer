@@ -46,8 +46,8 @@ if [[ "$installed_version" != "nix (Nix) 2.35.2" ]]; then
   exit 1
 fi
 
-grep -Fqx "flake-registry =" /etc/nix/nix.conf
-grep -Fqx "accept-flake-config = false" /etc/nix/nix.conf
+grep -Fqx "flake-registry =" /etc/nix/nix.custom.conf
+grep -Fqx "accept-flake-config = false" /etc/nix/nix.custom.conf
 test -x /nix/nix-installer
 test -f /nix/receipt.json
 
